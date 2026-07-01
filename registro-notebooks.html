@@ -1,0 +1,938 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Registro de Notebooks · Grupo Fleury</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Sans+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.1/jspdf.plugin.autotable.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+/* ===== Identidade: etiqueta de patrimônio / inventário técnico =====
+   Papel grafite, tinta escura, um único acento laranja-segurança
+   (cor de etiqueta de ativo físico). Códigos tratados como tags reais. */
+:root{
+  --paper:#FFFFFF;
+  --paper-raised:#FAFAFA;
+  --panel:#FFFFFF;
+  --ink:#C81E1E;
+  --ink-soft:#A81717;
+  --fill:#000000;
+  --muted:#B85555;
+  --line:#DDD;
+  --line-strong:#111111;
+  --orange:#111111;
+  --orange-dark:#000000;
+  --blue:#2E5D8A;
+  --green:#3F7D53;
+  --amber:#B7842B;
+  --red:#B23A2E;
+  --sans:'IBM Plex Sans',sans-serif;
+  --cond:'IBM Plex Sans Condensed',sans-serif;
+  --mono:'IBM Plex Mono',monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{
+  font-family:var(--sans);
+  background:var(--paper);
+  color:var(--ink);
+  min-height:100vh;
+}
+h1,h2,h3{font-family:var(--cond);letter-spacing:.01em;}
+.app{display:flex;min-height:100vh;}
+
+/* Sidebar — clipboard de manifesto */
+.sidebar{
+  width:216px;
+  background:var(--fill);
+  color:#C9CCC3;
+  display:flex;
+  flex-direction:column;
+  padding:0;
+  flex-shrink:0;
+  border-right:3px solid var(--orange);
+}
+.sidebar .brand{
+  padding:22px 22px 20px;
+  border-bottom:1px solid rgba(255,255,255,0.14);
+}
+.sidebar .brand .eyebrow{font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink);}
+.sidebar .brand h1{font-size:19px;font-weight:700;margin-top:6px;line-height:1.25;color:#F2F2EE;}
+.nav-item{
+  padding:14px 22px;
+  cursor:pointer;
+  font-family:var(--mono);
+  font-size:12.5px;
+  font-weight:500;
+  letter-spacing:.03em;
+  text-transform:uppercase;
+  color:#B8B8B8;
+  border-left:3px solid transparent;
+  transition:all .12s ease;
+}
+.nav-item:hover{background:rgba(255,255,255,0.08);color:#fff;}
+.nav-item.active{background:rgba(200,30,30,0.18);color:#fff;border-left-color:var(--ink);}
+.sidebar-foot{margin-top:auto;padding:16px 22px 20px;font-family:var(--mono);font-size:10.5px;color:#999;border-top:1px solid rgba(255,255,255,0.15);}
+#conn-status{color:#C81E1E;}
+
+/* Main */
+.main{flex:1;padding:32px 40px;overflow-x:auto;}
+.view{display:none;}
+.view.active{display:block;}
+.view-head{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:22px;flex-wrap:wrap;gap:12px;border-bottom:2px solid var(--ink);padding-bottom:14px;}
+.view-head h2{font-size:23px;font-weight:700;}
+.view-head p{color:var(--muted);font-size:13px;margin-top:4px;font-family:var(--mono);}
+
+.panel{background:var(--panel);border:1px solid var(--line-strong);border-radius:3px;padding:24px;box-shadow:2px 2px 0 rgba(32,36,31,0.06);}
+
+/* Form */
+.form-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px 20px;}
+.field{display:flex;flex-direction:column;gap:6px;}
+.field.span-2{grid-column:span 2;}
+.field.span-3{grid-column:span 3;}
+label{font-family:var(--mono);font-size:11px;font-weight:600;color:var(--ink);text-transform:uppercase;letter-spacing:.05em;}
+input,select,textarea{
+  font-family:var(--sans);
+  font-size:14px;
+  padding:9px 11px;
+  border:1px solid var(--line-strong);
+  border-radius:2px;
+  background:var(--paper-raised);
+  color:var(--ink);
+}
+input:focus,select:focus,textarea:focus{outline:2px solid var(--ink);outline-offset:-1px;border-color:var(--ink);}
+textarea{resize:vertical;min-height:60px;}
+
+/* Tag chip — o elemento assinatura: código exibido como etiqueta física */
+.tag-chip{
+  display:inline-flex;align-items:center;gap:7px;
+  font-family:var(--mono);font-size:12.5px;font-weight:500;
+  background:var(--paper-raised);
+  border:1px dashed var(--line-strong);
+  border-radius:3px;
+  padding:4px 10px 4px 7px;
+  color:var(--ink-soft);
+}
+.tag-chip .hole{width:7px;height:7px;border-radius:50%;background:var(--paper);border:1.3px solid var(--ink-soft);flex-shrink:0;}
+.code-preview{font-size:12.5px;color:var(--muted);}
+
+.btn{
+  font-family:var(--mono);
+  font-weight:600;
+  font-size:12.5px;
+  text-transform:uppercase;
+  letter-spacing:.03em;
+  padding:10px 18px;
+  border-radius:2px;
+  border:1px solid transparent;
+  cursor:pointer;
+  transition:opacity .15s;
+}
+.btn:hover{opacity:.85;}
+.btn:disabled{opacity:.5;cursor:not-allowed;}
+.btn-primary{background:var(--fill);color:#fff;}
+.btn-amber{background:var(--orange);color:#fff;}
+.btn-outline{background:transparent;color:var(--ink);border:1px solid var(--ink);}
+.btn-sm{padding:6px 12px;font-size:11.5px;}
+.btn-danger{background:transparent;color:var(--red);border:1px solid var(--red);}
+
+.form-actions{margin-top:20px;display:flex;gap:14px;align-items:center;}
+.msg{font-family:var(--mono);font-size:12.5px;padding:8px 0;}
+.msg.ok{color:var(--green);}
+.msg.err{color:var(--red);}
+
+/* Filters + list */
+.filters{display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;}
+.filters select,.filters input{min-width:140px;}
+.table-wrap{overflow-x:auto;border:1px solid var(--line-strong);border-radius:3px;}
+table{width:100%;border-collapse:collapse;font-size:13px;}
+th{
+  text-align:left;
+  background:var(--fill);
+  padding:10px 12px;
+  font-family:var(--mono);
+  font-size:10.5px;
+  text-transform:uppercase;
+  letter-spacing:.05em;
+  color:#D8DACF;
+  white-space:nowrap;
+  position:sticky;top:0;
+}
+td{padding:10px 12px;border-top:1px solid var(--line);white-space:nowrap;}
+tr:hover td{background:var(--paper-raised);}
+.badge{
+  display:inline-block;padding:3px 9px;border-radius:2px;font-family:var(--mono);font-size:10.5px;font-weight:600;text-transform:uppercase;letter-spacing:.02em;border:1px solid transparent;
+}
+.badge.uso{background:#E1EEE4;color:var(--green);border-color:#BCDBC4;}
+.badge.estoque{background:#E4EAF1;color:var(--blue);border-color:#C3D2E3;}
+.badge.reparo{background:#F5E7D2;color:var(--amber);border-color:#E6CB9B;}
+.badge.baixado{background:#F3DCD9;color:var(--red);border-color:#E3B9B3;}
+.badge.sim{background:#E1EEE4;color:var(--green);border-color:#BCDBC4;}
+.badge.nao{background:#F3DCD9;color:var(--red);border-color:#E3B9B3;}
+.badge.analise{background:#F5E7D2;color:var(--amber);border-color:#E6CB9B;}
+.row-actions{display:flex;gap:6px;}
+.empty-state{padding:40px;text-align:center;color:var(--muted);font-size:14px;font-family:var(--mono);}
+
+/* Dashboard */
+.cards{display:grid;grid-template-columns:repeat(5,1fr);gap:14px;margin-bottom:24px;}
+.card{background:var(--panel);border:1px solid var(--line-strong);border-radius:3px;padding:18px;box-shadow:2px 2px 0 rgba(32,36,31,0.06);border-top:3px solid var(--orange);}
+.card .num{font-family:var(--cond);font-size:30px;font-weight:700;color:var(--ink);}
+.card .label{font-family:var(--mono);font-size:10.5px;color:var(--muted);margin-top:4px;text-transform:uppercase;letter-spacing:.05em;}
+.charts{display:grid;grid-template-columns:1fr 1fr;gap:20px;}
+.chart-box{background:var(--panel);border:1px solid var(--line-strong);border-radius:3px;padding:20px;}
+.chart-box h3{font-family:var(--mono);font-size:12px;margin-bottom:14px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;font-weight:600;}
+
+/* Modal */
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(32,36,31,0.55);align-items:center;justify-content:center;z-index:50;}
+.modal-overlay.active{display:flex;}
+.modal{background:#fff;border-radius:3px;padding:26px;width:480px;max-width:92vw;max-height:85vh;overflow-y:auto;border-top:3px solid var(--orange);}
+.modal h3{font-family:var(--cond);font-size:17px;margin-bottom:16px;color:var(--ink);}
+.modal .field{margin-bottom:12px;}
+.history-item{border-left:2px solid var(--orange);padding:8px 0 8px 12px;margin-bottom:8px;font-size:13px;}
+.history-item .hdate{font-family:var(--mono);font-weight:600;font-size:12px;color:var(--ink);}
+.modal-close{position:absolute;top:16px;right:20px;cursor:pointer;font-size:20px;color:var(--muted);}
+.modal{position:relative;}
+
+@media (max-width:900px){
+  .app{flex-direction:column;}
+  .sidebar{width:100%;flex-direction:row;overflow-x:auto;border-right:none;border-bottom:3px solid var(--orange);}
+  .sidebar .brand{border-bottom:none;padding:16px;}
+  .form-grid{grid-template-columns:1fr 1fr;}
+  .cards{grid-template-columns:repeat(2,1fr);}
+  .charts{grid-template-columns:1fr;}
+}
+
+/* Login */
+.login-screen{
+  min-height:100vh;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  background:var(--paper);
+}
+.login-box{
+  width:340px;
+  max-width:90vw;
+  padding:32px;
+  border:1px solid var(--line-strong);
+  border-top:4px solid var(--fill);
+  border-radius:3px;
+  box-shadow:3px 3px 0 rgba(0,0,0,0.08);
+}
+.login-box .eyebrow{font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink);}
+.login-box h1{font-size:22px;font-weight:700;margin-top:6px;color:var(--fill);}
+.login-sub{font-family:var(--mono);font-size:12px;color:var(--muted);margin-top:6px;margin-bottom:22px;}
+.login-box .field{margin-bottom:14px;}
+.login-note{font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:16px;line-height:1.5;}
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div class="login-screen" id="login-screen">
+  <div class="login-box">
+    <div class="eyebrow">EUC · Fleury / Pardini</div>
+    <h1>Registro de Notebooks</h1>
+    <p class="login-sub">Acesso restrito à equipe de EUC.</p>
+    <form id="form-login">
+      <div class="field">
+        <label>E-mail</label>
+        <input type="email" id="login-email" required autocomplete="username">
+      </div>
+      <div class="field">
+        <label>Senha</label>
+        <input type="password" id="login-senha" required autocomplete="current-password">
+      </div>
+      <button type="submit" class="btn btn-primary" style="width:100%;margin-top:6px;">Entrar</button>
+      <div class="msg" id="login-msg"></div>
+    </form>
+    <p class="login-note">Não tem conta? Peça pro administrador criar seu acesso no painel do Supabase (Authentication → Users).</p>
+  </div>
+</div>
+
+<div class="app" id="app-container" style="display:none;">
+  <div class="sidebar">
+    <div class="brand">
+      <div class="eyebrow">EUC · Fleury / Pardini</div>
+      <h1>Registro de Notebooks</h1>
+    </div>
+    <div class="nav-item active" data-view="cadastro">＋ Cadastro</div>
+    <div class="nav-item" data-view="lista">☰ Lista e gerenciamento</div>
+    <div class="nav-item" data-view="dashboard">▤ Dashboard</div>
+    <div class="nav-item" data-view="usuarios" id="nav-usuarios" style="display:none;">⚿ Usuários</div>
+    <div class="sidebar-foot">
+      <span id="user-email"></span><br>
+      <span id="conn-status">verificando conexão…</span><br>
+      <a href="#" id="btn-logout" style="color:#C81E1E;text-decoration:none;font-weight:600;">Sair</a>
+    </div>
+  </div>
+
+  <div class="main">
+
+    <!-- CADASTRO -->
+
+    <div class="view active" id="view-cadastro">
+      <div class="view-head">
+        <div>
+          <h2>Cadastrar notebook</h2>
+          <p>Código gerado automaticamente ao salvar.</p>
+        </div>
+      </div>
+      <div class="panel">
+        <form id="form-cadastro">
+          <div class="form-grid">
+            <div class="field">
+              <label>Data de registro</label>
+              <input type="date" id="f_data_registro" required>
+            </div>
+            <div class="field">
+              <label>Data de saída</label>
+              <input type="date" id="f_data_saida">
+            </div>
+            <div class="field">
+              <label>Ticket do atendimento</label>
+              <input type="text" id="f_ticket" placeholder="Ex: FRESH-123456">
+            </div>
+
+            <div class="field">
+              <label>Quem me entregou</label>
+              <input type="text" id="f_entregue_por">
+            </div>
+            <div class="field">
+              <label>Quem retirou</label>
+              <input type="text" id="f_retirado_por">
+            </div>
+            <div class="field">
+              <label>Cadastrado por</label>
+              <input type="text" id="f_cadastrado_por" readonly style="background:#F0F0F0;color:var(--muted);">
+            </div>
+
+            <div class="field">
+              <label>Marca</label>
+              <select id="f_marca" required>
+                <option value="">Selecione</option>
+                <option>Lenovo</option>
+                <option>Dell</option>
+                <option>Positivo Vaio</option>
+                <option>HP</option>
+                <option>MacBook</option>
+                <option>Outros</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Modelo</label>
+              <input type="text" id="f_modelo" placeholder="Ex: ThinkPad E14">
+            </div>
+            <div class="field">
+              <label>Tag / Serial</label>
+              <input type="text" id="f_tag_serial" required placeholder="Único — checado antes de salvar">
+            </div>
+
+            <div class="field">
+              <label>Memória RAM</label>
+              <input type="text" id="f_ram" placeholder="Ex: 16GB">
+            </div>
+            <div class="field">
+              <label>Armazenamento</label>
+              <input type="text" id="f_armazenamento" placeholder="Ex: 512GB SSD">
+            </div>
+            <div class="field"></div>
+
+            <div class="field">
+              <label>Marca do equipamento (empresa)</label>
+              <select id="f_empresa" required>
+                <option value="">Selecione</option>
+                <option>Fleury</option>
+                <option>Pardini</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Está bom para uso</label>
+              <select id="f_bom_uso" required>
+                <option value="">Selecione</option>
+                <option value="sim">Sim</option>
+                <option value="nao">Não</option>
+                <option value="em_analise">Em análise</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Status atual do equipamento</label>
+              <select id="f_status_atual" required>
+                <option value="">Selecione</option>
+                <option value="em_uso">Em uso</option>
+                <option value="em_estoque">Em estoque</option>
+                <option value="em_reparo">Em reparo</option>
+                <option value="baixado">Baixado</option>
+              </select>
+            </div>
+
+            <div class="field span-3">
+              <label>Defeito</label>
+              <textarea id="f_defeito" placeholder="Descreva o defeito relatado, se houver"></textarea>
+            </div>
+
+            <div class="field">
+              <label>Foi para reparo?</label>
+              <select id="f_foi_reparo">
+                <option value="nao">Não</option>
+                <option value="sim">Sim — registrar abaixo</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Data de envio ao reparo</label>
+              <input type="date" id="f_data_envio_reparo">
+            </div>
+            <div class="field">
+              <label>Data de retorno do reparo</label>
+              <input type="date" id="f_data_retorno_reparo">
+            </div>
+          </div>
+          <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Salvar registro</button>
+            <span class="tag-chip" id="code-preview"><span class="hole"></span><span id="code-preview-text"></span></span>
+          </div>
+          <div class="msg" id="cadastro-msg"></div>
+        </form>
+      </div>
+    </div>
+
+    <!-- LISTA -->
+    <div class="view" id="view-lista">
+      <div class="view-head">
+        <div>
+          <h2>Lista e gerenciamento</h2>
+          <p id="lista-count">0 notebooks cadastrados</p>
+        </div>
+        <div style="display:flex;gap:10px;">
+          <button class="btn btn-outline btn-sm" id="btn-refresh">Atualizar</button>
+          <button class="btn btn-amber btn-sm" id="btn-export-pdf">Exportar PDF</button>
+        </div>
+      </div>
+      <div class="filters">
+        <select id="filter-marca"><option value="">Marca (todas)</option></select>
+        <select id="filter-empresa"><option value="">Empresa (todas)</option></select>
+        <select id="filter-status">
+          <option value="">Status (todos)</option>
+          <option value="em_uso">Em uso</option>
+          <option value="em_estoque">Em estoque</option>
+          <option value="em_reparo">Em reparo</option>
+          <option value="baixado">Baixado</option>
+        </select>
+        <input type="text" id="filter-search" placeholder="Buscar por tag/serial, ticket, nome...">
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Código</th><th>Marca</th><th>Modelo</th><th>RAM</th><th>Armazenamento</th><th>Tag/Serial</th>
+              <th>Empresa</th><th>Status</th><th>Bom p/ uso</th><th>Registro</th><th>Ações</th>
+            </tr>
+          </thead>
+          <tbody id="table-body"></tbody>
+        </table>
+        <div class="empty-state" id="empty-state" style="display:none;">Nenhum notebook encontrado.</div>
+      </div>
+    </div>
+
+    <!-- DASHBOARD -->
+    <div class="view" id="view-dashboard">
+      <div class="view-head">
+        <div>
+          <h2>Dashboard</h2>
+          <p>Visão geral do parque de notebooks.</p>
+        </div>
+      </div>
+      <div class="cards">
+        <div class="card"><div class="num" id="kpi-total">0</div><div class="label">Total</div></div>
+        <div class="card"><div class="num" id="kpi-uso">0</div><div class="label">Em uso</div></div>
+        <div class="card"><div class="num" id="kpi-estoque">0</div><div class="label">Em estoque</div></div>
+        <div class="card"><div class="num" id="kpi-reparo">0</div><div class="label">Em reparo</div></div>
+        <div class="card"><div class="num" id="kpi-baixado">0</div><div class="label">Baixados</div></div>
+      </div>
+      <div class="charts">
+        <div class="chart-box"><h3>Por marca</h3><canvas id="chart-marca"></canvas></div>
+        <div class="chart-box"><h3>Por empresa</h3><canvas id="chart-empresa"></canvas></div>
+      </div>
+    </div>
+
+    <!-- USUÁRIOS (admin) -->
+    <div class="view" id="view-usuarios">
+      <div class="view-head">
+        <div>
+          <h2>Usuários</h2>
+          <p>Somente administradores podem criar ou excluir logins.</p>
+        </div>
+      </div>
+      <div class="panel" style="margin-bottom:20px;">
+        <h3 style="font-size:14px;margin-bottom:14px;">Criar novo login</h3>
+        <form id="form-novo-usuario" style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;">
+          <div class="field" style="flex:1;min-width:200px;">
+            <label>E-mail</label>
+            <input type="email" id="novo-user-email" required>
+          </div>
+          <div class="field" style="flex:1;min-width:200px;">
+            <label>Senha temporária</label>
+            <input type="text" id="novo-user-senha" required placeholder="Mín. 8 caracteres">
+          </div>
+          <div class="field">
+            <label style="visibility:hidden;">.</label>
+            <label style="display:flex;align-items:center;gap:6px;text-transform:none;font-weight:400;color:var(--ink-soft);">
+              <input type="checkbox" id="novo-user-admin" style="width:auto;"> Também é admin
+            </label>
+          </div>
+          <button type="submit" class="btn btn-primary">Criar login</button>
+        </form>
+        <div class="msg" id="novo-usuario-msg"></div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>E-mail</th><th>Criado em</th><th>Ações</th></tr></thead>
+          <tbody id="usuarios-body"></tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- Modal: histórico de reparo -->
+<div class="modal-overlay" id="modal-overlay">
+  <div class="modal">
+    <span class="modal-close" id="modal-close">×</span>
+    <h3 id="modal-title">Histórico de reparo</h3>
+    <div id="modal-body"></div>
+  </div>
+</div>
+
+<script>
+/* ============ CONFIGURAÇÃO SUPABASE ============
+   Preencha com os dados do SEU projeto Supabase
+   (Project Settings → API). Rode o SQL do arquivo
+   schema.sql nesse projeto antes de usar.       */
+const SUPABASE_URL = 'COLOQUE_SUA_URL_AQUI';
+const SUPABASE_ANON_KEY = 'COLOQUE_SUA_ANON_KEY_AQUI';
+/* ================================================ */
+
+const sb = (SUPABASE_URL.startsWith('http'))
+  ? supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+  : null;
+
+document.getElementById('conn-status').textContent = sb ? 'conectado' : 'configure SUPABASE_URL / KEY no código';
+
+// ---------- Autenticação ----------
+async function checkSession(){
+  if(!sb) return;
+  const { data:{ session } } = await sb.auth.getSession();
+  if(session){
+    showApp(session);
+  } else {
+    showLogin();
+  }
+}
+
+async function showApp(session){
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('app-container').style.display = 'flex';
+  document.getElementById('user-email').textContent = session.user.email;
+  document.getElementById('f_cadastrado_por').value = session.user.email;
+
+  const { data: adminRow } = await sb.from('admins').select('user_id').eq('user_id', session.user.id).maybeSingle();
+  isAdmin = !!adminRow;
+  document.getElementById('nav-usuarios').style.display = isAdmin ? 'block' : 'none';
+}
+let isAdmin = false;
+
+function showLogin(){
+  document.getElementById('login-screen').style.display = 'flex';
+  document.getElementById('app-container').style.display = 'none';
+}
+
+document.getElementById('form-login').addEventListener('submit', async (e)=>{
+  e.preventDefault();
+  const msg = document.getElementById('login-msg');
+  msg.textContent = '';
+  msg.className = 'msg';
+
+  if(!sb){ msg.textContent = 'Configure a conexão com o Supabase no topo do arquivo.'; msg.className='msg err'; return; }
+
+  const email = document.getElementById('login-email').value.trim();
+  const senha = document.getElementById('login-senha').value;
+
+  const { data, error } = await sb.auth.signInWithPassword({ email, password: senha });
+  if(error){
+    msg.textContent = 'E-mail ou senha inválidos.';
+    msg.className = 'msg err';
+    return;
+  }
+  showApp(data.session);
+});
+
+document.getElementById('btn-logout').addEventListener('click', async (e)=>{
+  e.preventDefault();
+  await sb.auth.signOut();
+  showLogin();
+});
+
+if(sb){
+  sb.auth.onAuthStateChange((_event, session)=>{
+    if(session) showApp(session); else showLogin();
+  });
+  checkSession();
+} else {
+  showLogin();
+}
+
+// ---------- Navegação ----------
+document.querySelectorAll('.nav-item').forEach(item=>{
+  item.addEventListener('click', ()=>{
+    document.querySelectorAll('.nav-item').forEach(i=>i.classList.remove('active'));
+    document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+    item.classList.add('active');
+    document.getElementById('view-'+item.dataset.view).classList.add('active');
+    if(item.dataset.view === 'lista') loadNotebooks();
+    if(item.dataset.view === 'dashboard') loadDashboard();
+    if(item.dataset.view === 'usuarios') loadUsuarios();
+  });
+});
+
+document.getElementById('f_data_registro').valueAsDate = new Date();
+
+// ---------- Geração de código ----------
+function gerarCodigo(){
+  const d = new Date();
+  const ymd = d.getFullYear().toString() + String(d.getMonth()+1).padStart(2,'0') + String(d.getDate()).padStart(2,'0');
+  const rand = Math.random().toString(36).substring(2,6).toUpperCase();
+  return `NB-${ymd}-${rand}`;
+}
+document.getElementById('code-preview-text').textContent = 'Próximo código: ' + gerarCodigo();
+
+// ---------- Cadastro ----------
+document.getElementById('form-cadastro').addEventListener('submit', async (e)=>{
+  e.preventDefault();
+  const msg = document.getElementById('cadastro-msg');
+  msg.textContent = '';
+  msg.className = 'msg';
+
+  if(!sb){ msg.textContent = 'Configure a conexão com o Supabase no topo do arquivo antes de salvar.'; msg.className='msg err'; return; }
+
+  const tagSerial = document.getElementById('f_tag_serial').value.trim();
+  if(!tagSerial){ msg.textContent = 'Tag/Serial é obrigatório.'; msg.className='msg err'; return; }
+
+  // checa duplicidade
+  const { data: existing, error: checkErr } = await sb.from('notebooks').select('id, codigo').eq('tag_serial', tagSerial).limit(1);
+  if(checkErr){ msg.textContent = 'Erro ao checar duplicidade: ' + checkErr.message; msg.className='msg err'; return; }
+  if(existing && existing.length){ msg.textContent = `Já existe um notebook com essa Tag/Serial (código ${existing[0].codigo}).`; msg.className='msg err'; return; }
+
+  const codigo = gerarCodigo();
+  const payload = {
+    codigo,
+    data_registro: document.getElementById('f_data_registro').value || null,
+    data_saida: document.getElementById('f_data_saida').value || null,
+    ticket_atendimento: document.getElementById('f_ticket').value || null,
+    entregue_por: document.getElementById('f_entregue_por').value || null,
+    retirado_por: document.getElementById('f_retirado_por').value || null,
+    modelo: document.getElementById('f_modelo').value || null,
+    marca: document.getElementById('f_marca').value,
+    memoria_ram: document.getElementById('f_ram').value || null,
+    armazenamento: document.getElementById('f_armazenamento').value || null,
+    tag_serial: tagSerial,
+    defeito: document.getElementById('f_defeito').value || null,
+    esta_bom_uso: document.getElementById('f_bom_uso').value,
+    empresa: document.getElementById('f_empresa').value,
+    status_atual: document.getElementById('f_status_atual').value,
+    cadastrado_por: document.getElementById('f_cadastrado_por').value
+  };
+
+  const { data: inserted, error } = await sb.from('notebooks').insert(payload).select().single();
+  if(error){ msg.textContent = 'Erro ao salvar: ' + error.message; msg.className='msg err'; return; }
+
+  // se foi para reparo, registra o primeiro evento de histórico
+  if(document.getElementById('f_foi_reparo').value === 'sim'){
+    await sb.from('notebook_reparos').insert({
+      notebook_id: inserted.id,
+      data_envio: document.getElementById('f_data_envio_reparo').value || null,
+      data_retorno: document.getElementById('f_data_retorno_reparo').value || null,
+      defeito_reportado: payload.defeito
+    });
+  }
+
+  msg.textContent = `Salvo com sucesso — código ${codigo}.`;
+  msg.className = 'msg ok';
+  e.target.reset();
+  document.getElementById('f_data_registro').valueAsDate = new Date();
+  document.getElementById('code-preview-text').textContent = 'Próximo código: ' + gerarCodigo();
+});
+
+// ---------- Lista ----------
+let allNotebooks = [];
+
+async function loadNotebooks(){
+  if(!sb) return;
+  const { data, error } = await sb.from('notebooks').select('*').order('created_at', {ascending:false});
+  if(error){ console.error(error); return; }
+  allNotebooks = data || [];
+  populateFilterOptions();
+  renderTable();
+}
+
+function populateFilterOptions(){
+  const marcas = [...new Set(allNotebooks.map(n=>n.marca).filter(Boolean))];
+  const empresas = [...new Set(allNotebooks.map(n=>n.empresa).filter(Boolean))];
+  const selMarca = document.getElementById('filter-marca');
+  const selEmpresa = document.getElementById('filter-empresa');
+  if(selMarca.options.length <= 1){
+    marcas.forEach(m=>{ const o=document.createElement('option'); o.value=m; o.textContent=m; selMarca.appendChild(o); });
+  }
+  if(selEmpresa.options.length <= 1){
+    empresas.forEach(m=>{ const o=document.createElement('option'); o.value=m; o.textContent=m; selEmpresa.appendChild(o); });
+  }
+}
+
+function getFiltered(){
+  const marca = document.getElementById('filter-marca').value;
+  const empresa = document.getElementById('filter-empresa').value;
+  const status = document.getElementById('filter-status').value;
+  const search = document.getElementById('filter-search').value.toLowerCase();
+  return allNotebooks.filter(n=>{
+    if(marca && n.marca !== marca) return false;
+    if(empresa && n.empresa !== empresa) return false;
+    if(status && n.status_atual !== status) return false;
+    if(search){
+      const hay = `${n.tag_serial||''} ${n.ticket_atendimento||''} ${n.entregue_por||''} ${n.retirado_por||''} ${n.modelo||''} ${n.codigo||''}`.toLowerCase();
+      if(!hay.includes(search)) return false;
+    }
+    return true;
+  });
+}
+
+const statusLabel = {em_uso:'Em uso', em_estoque:'Em estoque', em_reparo:'Em reparo', baixado:'Baixado'};
+const statusClass = {em_uso:'uso', em_estoque:'estoque', em_reparo:'reparo', baixado:'baixado'};
+const bomUsoLabel = {sim:'Sim', nao:'Não', em_analise:'Em análise'};
+const bomUsoClass = {sim:'sim', nao:'nao', em_analise:'analise'};
+
+function renderTable(){
+  const rows = getFiltered();
+  const body = document.getElementById('table-body');
+  body.innerHTML = '';
+  document.getElementById('lista-count').textContent = `${rows.length} notebook(s)`;
+  document.getElementById('empty-state').style.display = rows.length ? 'none' : 'block';
+
+  rows.forEach(n=>{
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><span class="tag-chip"><span class="hole"></span>${n.codigo||''}</span></td>
+      <td>${n.marca||''}</td>
+      <td>${n.modelo||''}</td>
+      <td>${n.memoria_ram||''}</td>
+      <td>${n.armazenamento||''}</td>
+      <td style="font-family:var(--mono);font-size:12px;">${n.tag_serial||''}</td>
+      <td>${n.empresa||''}</td>
+      <td><span class="badge ${statusClass[n.status_atual]||''}">${statusLabel[n.status_atual]||n.status_atual||''}</span></td>
+      <td><span class="badge ${bomUsoClass[n.esta_bom_uso]||''}">${bomUsoLabel[n.esta_bom_uso]||''}</span></td>
+      <td>${n.data_registro||''}</td>
+      <td class="row-actions">
+        <button class="btn btn-outline btn-sm" onclick="abrirHistorico('${n.id}','${(n.codigo||'').replace(/'/g,"")}')">Reparo</button>
+        <button class="btn btn-danger btn-sm" onclick="excluirNotebook('${n.id}')">Excluir</button>
+      </td>
+    `;
+    body.appendChild(tr);
+  });
+}
+
+['filter-marca','filter-empresa','filter-status','filter-search'].forEach(id=>{
+  document.getElementById(id).addEventListener('input', renderTable);
+});
+document.getElementById('btn-refresh').addEventListener('click', loadNotebooks);
+
+async function excluirNotebook(id){
+  if(!confirm('Excluir este registro permanentemente? Isso também apaga o histórico de reparo associado.')) return;
+  const { error } = await sb.from('notebooks').delete().eq('id', id);
+  if(error){ alert('Erro ao excluir: ' + error.message); return; }
+  loadNotebooks();
+}
+
+// ---------- Modal de histórico de reparo ----------
+let currentNotebookId = null;
+
+async function abrirHistorico(notebookId, codigo){
+  currentNotebookId = notebookId;
+  document.getElementById('modal-title').textContent = `Histórico de reparo — ${codigo}`;
+  const body = document.getElementById('modal-body');
+  body.innerHTML = 'Carregando…';
+  document.getElementById('modal-overlay').classList.add('active');
+
+  const { data, error } = await sb.from('notebook_reparos').select('*').eq('notebook_id', notebookId).order('data_envio', {ascending:false});
+  if(error){ body.innerHTML = 'Erro ao carregar: ' + error.message; return; }
+
+  let html = '';
+  if(data && data.length){
+    data.forEach(r=>{
+      html += `<div class="history-item">
+        <div class="hdate">Envio: ${r.data_envio||'—'} · Retorno: ${r.data_retorno||'em aberto'}</div>
+        <div>${r.defeito_reportado || 'Sem descrição de defeito.'}</div>
+      </div>`;
+    });
+  } else {
+    html = '<p style="color:var(--muted);font-size:13px;">Nenhum reparo registrado ainda.</p>';
+  }
+
+  html += `
+    <h3 style="margin-top:18px;font-size:14px;">Registrar novo envio a reparo</h3>
+    <div class="field"><label>Data de envio</label><input type="date" id="rep_envio"></div>
+    <div class="field"><label>Data de retorno (deixe em branco se ainda não voltou)</label><input type="date" id="rep_retorno"></div>
+    <div class="field"><label>Defeito reportado</label><textarea id="rep_defeito"></textarea></div>
+    <button class="btn btn-primary btn-sm" onclick="salvarReparo()">Adicionar ao histórico</button>
+    <div class="msg" id="rep-msg"></div>
+  `;
+  body.innerHTML = html;
+}
+
+async function salvarReparo(){
+  const msg = document.getElementById('rep-msg');
+  const payload = {
+    notebook_id: currentNotebookId,
+    data_envio: document.getElementById('rep_envio').value || null,
+    data_retorno: document.getElementById('rep_retorno').value || null,
+    defeito_reportado: document.getElementById('rep_defeito').value || null
+  };
+  const { error } = await sb.from('notebook_reparos').insert(payload);
+  if(error){ msg.textContent = 'Erro: ' + error.message; msg.className = 'msg err'; return; }
+  const codigoEl = document.getElementById('modal-title').textContent;
+  abrirHistorico(currentNotebookId, codigoEl.split('—')[1]?.trim() || '');
+}
+
+document.getElementById('modal-close').addEventListener('click', ()=> document.getElementById('modal-overlay').classList.remove('active'));
+document.getElementById('modal-overlay').addEventListener('click', (e)=>{ if(e.target.id==='modal-overlay') e.currentTarget.classList.remove('active'); });
+
+// ---------- Dashboard ----------
+let chartMarca, chartEmpresa;
+
+async function loadDashboard(){
+  if(!sb) return;
+  if(!allNotebooks.length) await loadNotebooks();
+
+  const total = allNotebooks.length;
+  const count = s => allNotebooks.filter(n=>n.status_atual===s).length;
+  document.getElementById('kpi-total').textContent = total;
+  document.getElementById('kpi-uso').textContent = count('em_uso');
+  document.getElementById('kpi-estoque').textContent = count('em_estoque');
+  document.getElementById('kpi-reparo').textContent = count('em_reparo');
+  document.getElementById('kpi-baixado').textContent = count('baixado');
+
+  const byMarca = {};
+  const byEmpresa = {};
+  allNotebooks.forEach(n=>{
+    byMarca[n.marca] = (byMarca[n.marca]||0)+1;
+    byEmpresa[n.empresa] = (byEmpresa[n.empresa]||0)+1;
+  });
+
+  const palette = ['#C81E1E','#111111','#B85555','#666666','#8C2222','#CCCCCC'];
+
+  if(chartMarca) chartMarca.destroy();
+  chartMarca = new Chart(document.getElementById('chart-marca'), {
+    type:'bar',
+    data:{ labels:Object.keys(byMarca), datasets:[{ data:Object.values(byMarca), backgroundColor:palette }] },
+    options:{ plugins:{legend:{display:false}}, scales:{y:{beginAtZero:true, ticks:{stepSize:1}}} }
+  });
+
+  if(chartEmpresa) chartEmpresa.destroy();
+  chartEmpresa = new Chart(document.getElementById('chart-empresa'), {
+    type:'doughnut',
+    data:{ labels:Object.keys(byEmpresa), datasets:[{ data:Object.values(byEmpresa), backgroundColor:palette }] },
+    options:{ plugins:{legend:{position:'bottom'}} }
+  });
+}
+
+// ---------- Gestão de usuários (admin) ----------
+async function callManageUsers(action, payload={}){
+  const { data:{ session } } = await sb.auth.getSession();
+  const res = await fetch(`${SUPABASE_URL}/functions/v1/manage-users`, {
+    method:'POST',
+    headers:{ 'Content-Type':'application/json', 'Authorization':`Bearer ${session.access_token}` },
+    body: JSON.stringify({ action, ...payload })
+  });
+  return res.json();
+}
+
+async function loadUsuarios(){
+  if(!isAdmin) return;
+  const body = document.getElementById('usuarios-body');
+  body.innerHTML = '<tr><td colspan="3">Carregando…</td></tr>';
+  const result = await callManageUsers('list_users');
+  if(result.error){ body.innerHTML = `<tr><td colspan="3">Erro: ${result.error}</td></tr>`; return; }
+
+  const { data:{ session } } = await sb.auth.getSession();
+  body.innerHTML = '';
+  result.users.forEach(u=>{
+    const tr = document.createElement('tr');
+    const isSelf = u.id === session.user.id;
+    tr.innerHTML = `
+      <td>${u.email}${isSelf ? ' <span style="color:var(--muted);font-size:11px;">(você)</span>' : ''}</td>
+      <td>${new Date(u.created_at).toLocaleDateString('pt-BR')}</td>
+      <td>${isSelf ? '—' : `<button class="btn btn-danger btn-sm" onclick="excluirUsuario('${u.id}','${u.email}')">Excluir</button>`}</td>
+    `;
+    body.appendChild(tr);
+  });
+}
+
+document.getElementById('form-novo-usuario').addEventListener('submit', async (e)=>{
+  e.preventDefault();
+  const msg = document.getElementById('novo-usuario-msg');
+  msg.textContent = ''; msg.className = 'msg';
+
+  const email = document.getElementById('novo-user-email').value.trim();
+  const senha = document.getElementById('novo-user-senha').value;
+  const tornarAdmin = document.getElementById('novo-user-admin').checked;
+
+  const result = await callManageUsers('create_user', { email, password: senha });
+  if(result.error){ msg.textContent = 'Erro: ' + result.error; msg.className = 'msg err'; return; }
+
+  if(tornarAdmin && result.user){
+    const adminResult = await callManageUsers('make_admin', { user_id: result.user.id });
+    if(adminResult.error){ msg.textContent = 'Login criado, mas falhou ao tornar admin: ' + adminResult.error; msg.className = 'msg err'; }
+  }
+
+  msg.textContent = `Login criado para ${email}.`;
+  msg.className = 'msg ok';
+  e.target.reset();
+  loadUsuarios();
+});
+
+async function excluirUsuario(userId, email){
+  if(!confirm(`Excluir o login de ${email}? Essa pessoa perde o acesso imediatamente.`)) return;
+  const result = await callManageUsers('delete_user', { user_id: userId });
+  if(result.error){ alert('Erro: ' + result.error); return; }
+  loadUsuarios();
+}
+
+// ---------- Exportar PDF ----------
+document.getElementById('btn-export-pdf').addEventListener('click', ()=>{
+  const rows = getFiltered();
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({orientation:'landscape'});
+
+  doc.setFontSize(14);
+  doc.text('Relatório de Notebooks — Grupo Fleury / Pardini', 14, 15);
+  doc.setFontSize(9);
+  doc.setTextColor(100);
+  doc.text(`Gerado em ${new Date().toLocaleString('pt-BR')} · ${rows.length} registro(s)`, 14, 21);
+
+  doc.autoTable({
+    startY: 27,
+    head: [['Código','Marca','Modelo','RAM','Armazenamento','Tag/Serial','Empresa','Status','Bom p/ uso','Registro','Cadastrado por']],
+    body: rows.map(n=>[
+      n.codigo||'', n.marca||'', n.modelo||'', n.memoria_ram||'', n.armazenamento||'', n.tag_serial||'', n.empresa||'',
+      statusLabel[n.status_atual]||'', bomUsoLabel[n.esta_bom_uso]||'', n.data_registro||'', n.cadastrado_por||''
+    ]),
+    styles:{fontSize:8},
+    headStyles:{fillColor:[32,36,31]}
+  });
+
+  doc.save(`relatorio-notebooks-${new Date().toISOString().slice(0,10)}.pdf`);
+});
+</script>
+</body>
+</html>
